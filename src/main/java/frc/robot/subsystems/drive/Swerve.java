@@ -4,11 +4,13 @@ import choreo.trajectory.SwerveSample;
 import com.ctre.phoenix6.Utils;
 import com.ctre.phoenix6.configs.CANcoderConfiguration;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
-import com.ctre.phoenix6.swerve.*;
+import com.ctre.phoenix6.swerve.SwerveDrivetrainConstants;
+import com.ctre.phoenix6.swerve.SwerveModule;
+import com.ctre.phoenix6.swerve.SwerveModuleConstants;
+import com.ctre.phoenix6.swerve.SwerveRequest;
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.VecBuilder;
-import edu.wpi.first.math.Vector;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.filter.LinearFilter;
@@ -23,7 +25,6 @@ import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.numbers.N1;
-import edu.wpi.first.math.numbers.N2;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.math.util.Units;
@@ -47,8 +48,6 @@ import org.littletonrobotics.junction.Logger;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
@@ -56,7 +55,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static frc.robot.subsystems.drive.constants.SwerveConstants.Config;
-import static frc.robot.subsystems.drive.constants.SwerveConstants.ModuleCount;
 
 public class Swerve extends SubsystemBase {
     protected static final String LogKey = "Swerve";
@@ -81,20 +79,19 @@ public class Swerve extends SubsystemBase {
             .withSteerRequestType(SwerveModule.SteerRequestType.Position)
             .withDesaturateWheelSpeeds(true)
             .withCenterOfRotation(Config.centerOfRotationMeters())
-            .withForwardPerspective(SwerveRequest.ForwardPerspectiveValue.OperatorPerspective);
+            .withForwardPerspective(SwerveRequest.ForwardPerspectiveValue.BlueAlliance);
 
     private final SwerveRequest.RobotCentric driveRobotRelative = new SwerveRequest.RobotCentric()
             .withDriveRequestType(SwerveModule.DriveRequestType.Velocity)
             .withSteerRequestType(SwerveModule.SteerRequestType.Position)
-            .withCenterOfRotation(Config.centerOfRotationMeters())
-            .withDesaturateWheelSpeeds(true);
+            .withDesaturateWheelSpeeds(true)
+            .withCenterOfRotation(Config.centerOfRotationMeters());
 
-    private final SwerveRequest.ApplyFieldSpeeds applyFieldSpeeds = new SwerveRequest.ApplyFieldSpeeds()
+    private final SwerveRequest.ApplyRobotSpeeds applyRobotSpeeds = new SwerveRequest.ApplyRobotSpeeds()
             .withDriveRequestType(SwerveModule.DriveRequestType.Velocity)
             .withSteerRequestType(SwerveModule.SteerRequestType.Position)
             .withDesaturateWheelSpeeds(true)
-            .withCenterOfRotation(Config.centerOfRotationMeters())
-            .withForwardPerspective(SwerveRequest.ForwardPerspectiveValue.OperatorPerspective);
+            .withCenterOfRotation(Config.centerOfRotationMeters());
 
     private final SwerveRequest.SwerveDriveBrake brake = new SwerveRequest.SwerveDriveBrake()
             .withDriveRequestType(SwerveModule.DriveRequestType.OpenLoopVoltage)
@@ -254,10 +251,7 @@ public class Swerve extends SubsystemBase {
 
             odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds);
         }
-
-        Logger.recordOutput(
-                OdometryLogKey + "/OdometryUpdatePeriodMs", odometryUpdatePeriodMs
-        );
+        Logger.recordOutput(OdometryLogKey + "/OdometryUpdatePeriodMs", odometryUpdatePeriodMs);
 
         //log current swerve chassis speeds
         final ChassisSpeeds robotRelativeSpeeds = getRobotRelativeSpeeds();
@@ -376,24 +370,19 @@ public class Swerve extends SubsystemBase {
         swerveIO.setControl(request);
     }
 
-    public Command applyRequest(final Supplier<SwerveRequest> request) {
-        return run(() -> applyRequest(request.get()));
-    }
-
     public void drive(
             final double xSpeedMeterPerSec,
             final double ySpeedMetersPerSec,
             final double omegaRadsPerSec,
             final boolean fieldRelative,
-            // TODO: fix invertYaw
             final boolean invertYaw
     ) {
         final SwerveRequest request;
         if (fieldRelative) {
             request = driveFieldRelative
-                    .withVelocityX(xSpeedMeterPerSec)
-                    .withVelocityY(ySpeedMetersPerSec)
-                    .withRotationalRate(omegaRadsPerSec);
+                    .withVelocityX(invertYaw ? -xSpeedMeterPerSec : xSpeedMeterPerSec)
+                    .withVelocityY(invertYaw ? -ySpeedMetersPerSec : ySpeedMetersPerSec)
+                    .withRotationalRate(invertYaw ? -omegaRadsPerSec : omegaRadsPerSec);
         } else {
             request = driveRobotRelative
                     .withVelocityX(xSpeedMeterPerSec)
@@ -421,22 +410,14 @@ public class Swerve extends SubsystemBase {
     }
 
     public void drive(final ChassisSpeeds speeds) {
-        applyRequest(applyFieldSpeeds.withSpeeds(speeds));
+        applyRequest(applyRobotSpeeds.withSpeeds(speeds));
     }
 
-    public void drive(final ChassisSpeeds speeds, final List<Vector<N2>> moduleForceVectors) {
-        final double[] wheelForceFeedforwardsX = new double[ModuleCount];
-        final double[] wheelForceFeedforwardsY = new double[ModuleCount];
-        for (int i = 0; i < ModuleCount; i++) {
-            final Vector<N2> forceVec = moduleForceVectors.get(i);
-            wheelForceFeedforwardsX[i] = forceVec.get(0);
-            wheelForceFeedforwardsY[i] = forceVec.get(1);
-        }
-
-        applyRequest(applyFieldSpeeds
+    public void drive(final ChassisSpeeds speeds, final double[] moduleForcesX, final double[] moduleForcesY) {
+        applyRequest(applyRobotSpeeds
                 .withSpeeds(speeds)
-                .withWheelForceFeedforwardsX(wheelForceFeedforwardsX)
-                .withWheelForceFeedforwardsY(wheelForceFeedforwardsY)
+                .withWheelForceFeedforwardsX(moduleForcesX)
+                .withWheelForceFeedforwardsY(moduleForcesY)
         );
     }
 
@@ -789,14 +770,6 @@ public class Swerve extends SubsystemBase {
         final Pose2d currentPose = getPose();
         final ChassisSpeeds speeds = choreoController.calculate(currentPose, swerveSample);
 
-        final List<Vector<N2>> moduleForceVectors = new ArrayList<>();
-        final double[] moduleForcesX = swerveSample.moduleForcesX();
-        final double[] moduleForcesY = swerveSample.moduleForcesY();
-
-        for (int i = 0; i < ModuleCount; i++) {
-            moduleForceVectors.add(VecBuilder.fill(moduleForcesX[i], moduleForcesY[i]));
-        }
-
         Logger.recordOutput(Autos.LogKey + "/Timestamp", swerveSample.getTimestamp());
         Logger.recordOutput(Autos.LogKey + "/CurrentPose", currentPose);
         Logger.recordOutput(Autos.LogKey + "/TargetSpeeds", swerveSample.getChassisSpeeds());
@@ -812,7 +785,8 @@ public class Swerve extends SubsystemBase {
                 MathUtil.angleModulus(currentPose.getRotation().getRadians())
         );
 
-        drive(speeds, moduleForceVectors);
+//        drive(speeds, swerveSample.moduleForcesX(), swerveSample.moduleForcesY());
+        drive(speeds);
     }
 
     @SuppressWarnings("unused")

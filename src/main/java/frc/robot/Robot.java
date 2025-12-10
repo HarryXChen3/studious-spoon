@@ -148,7 +148,7 @@ public class Robot extends LoggedRobot {
     public final AutoChooser autoChooser = new AutoChooser(
             new AutoOption(
                     "DoNothing",
-                    autos::threePieceCage1,
+                    autos::doNothing,
                     Constants.CompetitionType.COMPETITION
             )
     );
@@ -436,12 +436,10 @@ public class Robot extends LoggedRobot {
         disabled.onTrue(swerve.stopCommand());
         teleopEnabled
                 .onTrue(superstructure.forceGoal(Superstructure.Goal.STOW));
-//                .onTrue(elevator.toVoltage(() -> 4).withTimeout(0.1));
     }
 
     public void configureAutos() {
-//        autonomousEnabled.whileTrue(Commands.deferredProxy(() -> autoChooser.getSelected().cmd()));
-        autonomousEnabled.whileTrue(Commands.deferredProxy(() -> autos.threePieceCage1().cmd()));
+        autonomousEnabled.whileTrue(Commands.deferredProxy(() -> autoChooser.getSelected().cmd()));
 
         autoChooser.addAutoOption(new AutoOption(
                 "ThreePieceCage1",

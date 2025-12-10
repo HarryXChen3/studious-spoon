@@ -119,12 +119,6 @@ public interface SwerveIO {
                 + "SwerveModuleState ModuleTargets[4]; SwerveModulePosition ModulePositions[4];"
                 + "Rotation2d RawHeading; double Timestamp; double OdometryPeriod; int32 SuccessfulDaqs;"
                 + "int32 FailedDaqs";
-//            return "Pose2d Pose; ChassisSpeeds Speeds;"
-//                    + "SwerveModuleState ModuleState0; SwerveModuleState ModuleState1; SwerveModuleState ModuleState2; SwerveModuleState ModuleState3;"
-//                    + "SwerveModuleState ModuleTarget0; SwerveModuleState ModuleTarget1; SwerveModuleState ModuleTarget2; SwerveModuleState ModuleTarget3;"
-//                    + "SwerveModulePosition ModulePosition0; SwerveModulePosition ModulePosition1; SwerveModulePosition ModulePosition2; SwerveModulePosition ModulePosition3;"
-//                    + "Rotation2d RawHeading; double Timestamp; double OdometryPeriod; int32 SuccessfulDaqs;"
-//                    + "int32 FailedDaqs";
         }
 
         @Override

@@ -117,7 +117,7 @@ public class Autos {
                 superstructure.toInstantGoal(Superstructure.Goal.ALIGN_AUTO_L4),
                 Commands.waitUntil(atCloseReef),
                 superstructure.runGoal(goal)
-        );
+        ).withName("readyScoreAtLevelAuto");
     }
 
     private Command scoreAtLevel(final ReefState.Branch branch) {
@@ -181,14 +181,14 @@ public class Autos {
                                 swerve.runWheelXCommand()
                         )
                 )
-        );
+        ).withName("scoreAtLevelAuto");
     }
 
     private Command readyIntakeCoralFromHP() {
         return Commands.parallel(
                 superstructure.runGoal(Superstructure.Goal.HP),
                 intake.intakeCoralHP().asProxy()
-        );
+        ).withName("readyIntakeCoralFromHP");
     }
 
     private Command driveIntoCoralStation(final ScoreCommands.CoralStation coralStation) {
@@ -200,7 +200,7 @@ public class Autos {
                         () -> 0,
                         () -> ScoreCommands.CoralStation.getCoralStation(coralStation).getRotation()
                 )
-        ).until(gamepieceState.intakeHasCoral);
+        ).until(gamepieceState.intakeHasCoral).withName("driveIntoCoralStation");
     }
 
     private Command runStartingTrajectory(final AutoTrajectory startingTrajectory) {
@@ -210,7 +210,7 @@ public class Autos {
                 Commands.runOnce(reefState::reset),
                 startingTrajectory.resetOdometry(),
                 startingTrajectory.cmd()
-        );
+        ).withName("runStartingTrajectory");
     }
 
     public AutoRoutine doNothing() {
@@ -514,7 +514,7 @@ public class Autos {
         final AutoRoutine routine = autoFactory.newRoutine("twoPieceCage0");
         final AutoTrajectory cage0Reef4 = routine.trajectory("Cage0Reef4");
         final AutoTrajectory reef4ToRightHP = routine.trajectory("Reef4ToRightHP");
-        final AutoTrajectory rightHPToReef5 = routine.trajectory("RightHPToReef5");
+        final AutoTrajectory rightHPToReef5 = routine.trajectory("RightHPToReef5Right");
         final AutoTrajectory moveEndOfAuto = routine.trajectory("Reef5ToRightHP");
 
         routine.active().onTrue(runStartingTrajectory(cage0Reef4));
@@ -522,8 +522,10 @@ public class Autos {
         cage0Reef4.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.FOUR, Reef.Side.LEFT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         reef4ToRightHP.cmd()
+                                .asProxy()
                 )
         );
 
@@ -539,8 +541,10 @@ public class Autos {
         rightHPToReef5.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.FIVE, Reef.Side.RIGHT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         moveEndOfAuto.cmd()
+                                .asProxy()
                 )
         );
 
@@ -555,7 +559,7 @@ public class Autos {
         final AutoRoutine routine = autoFactory.newRoutine("twoPieceCage1");
         final AutoTrajectory cage0Reef4 = routine.trajectory("Cage1Reef4");
         final AutoTrajectory reef4ToRightHP = routine.trajectory("Reef4ToRightHP");
-        final AutoTrajectory rightHPToReef5 = routine.trajectory("RightHPToReef5");
+        final AutoTrajectory rightHPToReef5 = routine.trajectory("RightHPToReef5Right");
         final AutoTrajectory moveEndOfAuto = routine.trajectory("Reef5ToRightHP");
 
         routine.active().onTrue(runStartingTrajectory(cage0Reef4));
@@ -563,12 +567,14 @@ public class Autos {
         cage0Reef4.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.FOUR, Reef.Side.LEFT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         reef4ToRightHP.cmd()
+                                .asProxy()
                 )
         );
 
-        reef4ToRightHP.active().onTrue(readyIntakeCoralFromHP());
+        reef4ToRightHP.active().whileTrue(readyIntakeCoralFromHP());
 
         reef4ToRightHP.done().onTrue(
                 Commands.sequence(
@@ -580,8 +586,10 @@ public class Autos {
         rightHPToReef5.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.FIVE, Reef.Side.RIGHT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         moveEndOfAuto.cmd()
+                                .asProxy()
                 )
         );
 
@@ -596,7 +604,7 @@ public class Autos {
         final AutoRoutine routine = autoFactory.newRoutine("twoPieceCage2");
         final AutoTrajectory cage2Reef4 = routine.trajectory("Cage2Reef4");
         final AutoTrajectory reef4ToRightHP = routine.trajectory("Reef4ToRightHP");
-        final AutoTrajectory rightHPToReef5 = routine.trajectory("RightHPToReef5");
+        final AutoTrajectory rightHPToReef5 = routine.trajectory("RightHPToReef5Right");
         final AutoTrajectory moveEndOfAuto = routine.trajectory("Reef5ToRightHP");
 
         routine.active().onTrue(runStartingTrajectory(cage2Reef4));
@@ -604,8 +612,10 @@ public class Autos {
         cage2Reef4.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.FOUR, Reef.Side.LEFT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         reef4ToRightHP.cmd()
+                                .asProxy()
                 )
         );
 
@@ -621,8 +631,10 @@ public class Autos {
         rightHPToReef5.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.FIVE, Reef.Side.RIGHT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         moveEndOfAuto.cmd()
+                                .asProxy()
                 )
         );
 
@@ -645,8 +657,10 @@ public class Autos {
         cage4Reef2.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.TWO, Reef.Side.RIGHT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         reef2ToLeftHP.cmd()
+                                .asProxy()
                 )
         );
 
@@ -662,8 +676,10 @@ public class Autos {
         leftHPToReef1Left.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.ONE, Reef.Side.LEFT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         moveEndOfAuto.cmd()
+                                .asProxy()
                 )
         );
 
@@ -686,8 +702,10 @@ public class Autos {
         cage0Reef2.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.TWO, Reef.Side.RIGHT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         reef2ToLeftHP.cmd()
+                                .asProxy()
                 )
         );
 
@@ -703,8 +721,10 @@ public class Autos {
         leftHPToReef1Left.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.ONE, Reef.Side.LEFT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         moveEndOfAuto.cmd()
+                                .asProxy()
                 )
         );
 
@@ -727,8 +747,10 @@ public class Autos {
         cage0Reef2.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.TWO, Reef.Side.RIGHT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         reef2ToLeftHP.cmd()
+                                .asProxy()
                 )
         );
 
@@ -744,8 +766,10 @@ public class Autos {
         leftHPToReef1Left.done().onTrue(
                 Commands.sequence(
                         scoreAtLevel(new ReefState.Branch(Reef.Face.ONE, Reef.Side.LEFT, Reef.Level.L4))
-                                .onlyIf(gamepieceState.intakeHasCoral),
+                                .onlyIf(gamepieceState.intakeHasCoral)
+                                .asProxy(),
                         moveEndOfAuto.cmd()
+                                .asProxy()
                 )
         );
 

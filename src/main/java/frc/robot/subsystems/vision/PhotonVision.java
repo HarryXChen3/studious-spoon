@@ -1,6 +1,7 @@
 package frc.robot.subsystems.vision;
 
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
+import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.Vector;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
@@ -9,6 +10,7 @@ import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Twist2d;
 import edu.wpi.first.math.kinematics.SwerveDriveOdometry;
+import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.RobotController;
@@ -29,6 +31,7 @@ import org.photonvision.targeting.PhotonTrackedTarget;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static edu.wpi.first.wpilibj2.command.Commands.runOnce;
@@ -43,7 +46,6 @@ public class PhotonVision extends VirtualSubsystem {
     private final double maxAngularVelocity = SwerveConstants.Config.maxAngularVelocityRadsPerSec();
 
     public static final AprilTagFieldLayout apriltagFieldLayout;
-
     static {
         try {
             apriltagFieldLayout = new AprilTagFieldLayout(
@@ -69,15 +71,13 @@ public class PhotonVision extends VirtualSubsystem {
     private final Map<? extends VisionIO, VisionIO.VisionIOInputs> aprilTagVisionIOInputsMap;
 
     private final Swerve swerve;
-    private final SwerveDrivePoseEstimator poseEstimator;
     private final Map<VisionIO, VisionResult> lastVisionUpdateMap;
 
     private double lastPoseResetTimestampSeconds = 0;
 
     public PhotonVision(
             final Constants.RobotMode robotMode,
-            final Swerve swerve,
-            final SwerveDrivePoseEstimator poseEstimator
+            final Swerve swerve
     ) {
         this.runner = switch (robotMode) {
             case REAL -> new RealVisionRunner(
@@ -125,12 +125,10 @@ public class PhotonVision extends VirtualSubsystem {
         };
 
         this.swerve = swerve;
-        this.poseEstimator = poseEstimator;
         this.aprilTagVisionIOInputsMap = runner.getApriltagVisionIOInputsMap();
 
         this.lastVisionUpdateMap = new HashMap<>();
-        final Pose2d estimatedPose = poseEstimator.getEstimatedPosition();
-        resetPose(estimatedPose);
+        resetPose(swerve.getPose());
     }
 
     public enum RejectionReason {
@@ -285,7 +283,7 @@ public class PhotonVision extends VirtualSubsystem {
                 Logger.recordOutput(logKey + "/StdDevs", stdDevs.getData());
 
                 lastVisionUpdateMap.put(visionIO, result);
-                poseEstimator.addVisionMeasurement(
+                swerve.addVisionMeasurement(
                         visionUpdate.estimatedPose().toPose2d(),
                         visionUpdateTimestamp,
                         stdDevs
@@ -359,7 +357,7 @@ public class PhotonVision extends VirtualSubsystem {
     }
 
     public void resetPose(final Pose2d robotPose) {
-        poseEstimator.resetPose(robotPose);
+        swerve.resetPose(robotPose);
         runner.resetRobotPose(GyroUtils.robotPose2dToPose3dWithGyro(
                 robotPose,
                 new Rotation3d(
@@ -369,7 +367,7 @@ public class PhotonVision extends VirtualSubsystem {
                 )
         ));
 
-        this.lastPoseResetTimestampSeconds = Timer.getTimestamp();
+        lastPoseResetTimestampSeconds = Timer.getTimestamp();
     }
 
     @SuppressWarnings("unused")

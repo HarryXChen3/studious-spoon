@@ -76,17 +76,22 @@ public class Robot extends LoggedRobot {
 
     public final Swerve swerve = new Swerve(
             Constants.CURRENT_MODE,
-            HardwareConstants.GYRO,
-            SwerveConstants.FrontLeftModule,
-            SwerveConstants.FrontRightModule,
-            SwerveConstants.BackLeftModule,
-            SwerveConstants.BackRightModule
+            SwerveConstants.CTRESwerve.DrivetrainConstants,
+            new SwerveConstants.SwerveModuleConfig[]{
+                    SwerveConstants.FrontLeftModule,
+                    SwerveConstants.FrontRightModule,
+                    SwerveConstants.BackLeftModule,
+                    SwerveConstants.BackRightModule
+            },
+            SwerveConstants.CTRESwerve.FrontLeft,
+            SwerveConstants.CTRESwerve.FrontRight,
+            SwerveConstants.CTRESwerve.BackLeft,
+            SwerveConstants.CTRESwerve.BackRight
     );
 
     public final PhotonVision photonVision = new PhotonVision(
             Constants.RobotMode.DISABLED,
-            swerve,
-            swerve.getPoseEstimator()
+            swerve
     );
 
     public final ElevatorArm elevatorArm = new ElevatorArm(
@@ -143,7 +148,7 @@ public class Robot extends LoggedRobot {
     public final AutoChooser autoChooser = new AutoChooser(
             new AutoOption(
                     "DoNothing",
-                    autos::doNothing,
+                    autos::threePieceCage1,
                     Constants.CompetitionType.COMPETITION
             )
     );

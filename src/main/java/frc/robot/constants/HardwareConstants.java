@@ -17,16 +17,6 @@ public class HardwareConstants {
         }
     }
 
-    public record GyroConstants(
-            CANBus CANBus,
-            int gyroId
-    ) {}
-
-    public static final GyroConstants GYRO = new GyroConstants(
-            CANBus.CANIVORE,
-            13
-    );
-
     public record ElevatorConstants(
             CANBus CANBus,
             int rightMotorId,

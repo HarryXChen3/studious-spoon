@@ -25,18 +25,6 @@ public interface SwerveIO {
         public SwerveDriveState[] states = new SwerveDriveState[0];
         public Rotation3d gyroRotation3d = Rotation3d.kZero;
         public double currentTimeSecondsCTRE = 0;
-
-//        public void toLog(final LogTable table) {
-//            table.put("States", SwerveDriveState.struct, states);
-//            table.put("GyroRotation3d", Rotation3d.struct, gyroRotation3d);
-//            table.put("CurrentTimeSecondsCTRE", currentTimeSecondsCTRE);
-//        }
-//
-//        public void fromLog(final LogTable table) {
-//            this.states = table.get("States", DefaultStates);
-//            this.gyroRotation3d = table.get("GyroRotation3d", Rotation3d.kZero);
-//            this.currentTimeSecondsCTRE = table.get("CurrentTimeSecondsCTRE", 0d);
-//        }
     }
 
     /**

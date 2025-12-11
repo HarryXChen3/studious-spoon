@@ -90,7 +90,7 @@ public class Robot extends LoggedRobot {
     );
 
     public final PhotonVision photonVision = new PhotonVision(
-            Constants.RobotMode.DISABLED,
+            Constants.CURRENT_MODE,
             swerve
     );
 
@@ -211,7 +211,7 @@ public class Robot extends LoggedRobot {
         ToClose.hook();
 
         // disable joystick not found warnings when in sim
-        DriverStation.silenceJoystickConnectionWarning(Constants.CURRENT_MODE == Constants.RobotMode.SIM);
+        DriverStation.silenceJoystickConnectionWarning(Constants.CURRENT_MODE != Constants.RobotMode.REAL);
 
         // record git metadata
         Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);

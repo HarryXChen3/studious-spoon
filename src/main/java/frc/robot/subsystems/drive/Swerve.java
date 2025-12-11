@@ -29,6 +29,7 @@ import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.RobotController;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -149,9 +150,9 @@ public class Swerve extends SubsystemBase {
         this.kinematics = new SwerveDriveKinematics(moduleOffsets);
         this.replayPoseEstimator = new SwerveDrivePoseEstimator(
                 kinematics,
-                getYaw(),
+                Rotation2d.kZero,
                 getModulePositions(),
-                getPose(),
+                Pose2d.kZero,
                 Constants.Vision.STATE_STD_DEVS,
                 VecBuilder.fill(0.6, 0.6, Units.degreesToRadians(80))
         );
@@ -226,16 +227,23 @@ public class Swerve extends SubsystemBase {
         Logger.processInputs(LogKey, inputs);
 
         final double odometryUpdatePeriodMs;
-        if (mode == Constants.RobotMode.REPLAY) {
+//        if (isReplay()) {
             final double odometryUpdateStart = RobotController.getFPGATime();
 
             double updatePeriodSeconds = 0;
             for (final SwerveDriveState state : inputs.states) {
                 updatePeriodSeconds = odometryPeriodFilter.calculate(state.OdometryPeriod);
-                replayPoseEstimator.updateWithTime(
-                        Utils.currentTimeToFPGATime(state.Timestamp),
-                        state.RawHeading,
-                        state.ModulePositions
+
+                final double fpgaTimestamp = currentTimeToFPGATime(state.Timestamp);
+                Logger.recordOutput("CalculatedTimestamp", fpgaTimestamp);
+                Logger.recordOutput("StateTimestamp", state.Timestamp);
+                poseBuffer.addSample(
+                        fpgaTimestamp,
+                        replayPoseEstimator.updateWithTime(
+                                Timer.getTimestamp(),
+                                state.RawHeading,
+                                state.ModulePositions
+                        )
                 );
             }
 
@@ -243,15 +251,19 @@ public class Swerve extends SubsystemBase {
                     RobotController.getFPGATime() - odometryUpdateStart
             );
             odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds) + replayUpdatePeriodMs;
-        } else {
-            double updatePeriodSeconds = 0;
-            for (final SwerveDriveState state : inputs.states) {
-                updatePeriodSeconds = odometryPeriodFilter.calculate(state.OdometryPeriod);
-            }
-
-            odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds);
-        }
+//        } else {
+//            double updatePeriodSeconds = 0;
+//            for (final SwerveDriveState state : inputs.states) {
+//                updatePeriodSeconds = odometryPeriodFilter.calculate(state.OdometryPeriod);
+//                poseBuffer.addSample(currentTimeToFPGATime(state.Timestamp), state.Pose);
+//            }
+//
+//            odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds);
+//        }
         Logger.recordOutput(OdometryLogKey + "/OdometryUpdatePeriodMs", odometryUpdatePeriodMs);
+
+        Logger.recordOutput("CTRETimestamp", Utils.getCurrentTimeSeconds());
+        Logger.recordOutput("TimerTimestamp", Timer.getTimestamp());
 
         //log current swerve chassis speeds
         final ChassisSpeeds robotRelativeSpeeds = getRobotRelativeSpeeds();
@@ -267,6 +279,7 @@ public class Swerve extends SubsystemBase {
 
         final Pose2d robotPose = getPose();
         Logger.recordOutput(OdometryLogKey + "/Robot2d", robotPose);
+        Logger.recordOutput(OdometryLogKey + "/ReplayPoseEstimator", replayPoseEstimator.getEstimatedPosition());
         Logger.recordOutput(OdometryLogKey + "/Robot3d", GyroUtils.robotPose2dToPose3dWithGyro(
                 robotPose,
                 getRotation3d()
@@ -298,6 +311,10 @@ public class Swerve extends SubsystemBase {
         return kinematics;
     }
 
+    private boolean isReplay() {
+        return mode == Constants.RobotMode.REPLAY;
+    }
+
     public <T> T fromLatestState(final Function<SwerveDriveState, T> from, final T orElse) {
         final SwerveDriveState[] states = inputs.states;
         return states.length != 0 ? from.apply(states[0]) : orElse;
@@ -308,6 +325,9 @@ public class Swerve extends SubsystemBase {
      * @return the estimated position of the robot, as a {@link Pose2d}
      */
     public Pose2d getPose() {
+//        if (isReplay()) {
+//            return replayPoseEstimator.getEstimatedPosition();
+//        }
         return fromLatestState(state -> state.Pose, Pose2d.kZero);
     }
 
@@ -355,14 +375,44 @@ public class Swerve extends SubsystemBase {
      * Use {@link frc.robot.subsystems.vision.PhotonVision#resetPose(Pose2d)} instead.
      */
     public void resetPose(final Pose2d pose) {
+//        if (isReplay()) {
+            replayPoseEstimator.resetPose(pose);
+//        }
         swerveIO.resetPose(pose);
     }
 
+    public double fpgaToCurrentTime(final double fpgaTimeSeconds) {
+//        if (isReplay()) {
+            return (inputs.timestamp - Timer.getTimestamp()) + fpgaTimeSeconds;
+//        } else {
+//            return (inputs.timestamp - Timer.getFPGATimestamp()) + fpgaTimeSeconds;
+//        }
+    }
+
+    public double currentTimeToFPGATime(final double currentTimeSeconds) {
+//        if (isReplay()) {
+            return (Timer.getTimestamp() - inputs.timestamp) + currentTimeSeconds;
+//        } else {
+//            return (Timer.getFPGATimestamp() - inputs.timestamp) + currentTimeSeconds;
+//        }
+    }
+
     public void addVisionMeasurement(
-            final Pose2d visionRobotPoseMeters,
-            final double timestampSeconds,
-            final Matrix<N3, N1> visionMeasurementStdDevs
+            Pose2d visionRobotPoseMeters,
+            double timestampSeconds,
+            Matrix<N3, N1> visionMeasurementStdDevs
     ) {
+        visionRobotPoseMeters = new Pose2d(2, 2, Rotation2d.kZero);
+        timestampSeconds = Timer.getTimestamp();
+        visionMeasurementStdDevs = VecBuilder.fill(0.6, 0.6, Units.degreesToRadians(80));
+//        if (isReplay()) {
+            replayPoseEstimator.addVisionMeasurement(
+                    visionRobotPoseMeters,
+                    timestampSeconds,
+//                    fpgaToCurrentTime(timestampSeconds),
+                    visionMeasurementStdDevs
+            );
+//        }
         swerveIO.addVisionMeasurement(visionRobotPoseMeters, timestampSeconds, visionMeasurementStdDevs);
     }
 

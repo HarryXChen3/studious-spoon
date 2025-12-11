@@ -10,9 +10,11 @@ import com.ctre.phoenix6.swerve.SwerveDrivetrainConstants;
 import com.ctre.phoenix6.swerve.SwerveModuleConstants;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
+import edu.wpi.first.math.util.Units;
 import edu.wpi.first.util.CircularBuffer;
 import frc.robot.constants.Constants;
 
@@ -35,7 +37,7 @@ public class SwerveIOReal implements SwerveIO {
                 TalonFX::new, TalonFX::new, CANcoder::new,
                 drivetrainConstants, 250,
                 Constants.Vision.STATE_STD_DEVS,
-                Constants.Vision.VISION_STD_DEV_COEFFS,
+                VecBuilder.fill(0.6, 0.6, Units.degreesToRadians(80)),
                 moduleConstants
         );
         this.drivetrain.registerTelemetry(state -> {

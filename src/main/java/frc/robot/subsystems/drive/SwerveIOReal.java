@@ -12,6 +12,7 @@ import com.ctre.phoenix6.swerve.SwerveRequest;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.util.Units;
@@ -68,6 +69,7 @@ public class SwerveIOReal implements SwerveIO {
         }
 
         inputs.gyroRotation3d = drivetrain.getRotation3d();
+        inputs.currentTimeSecondsCTRE = Utils.getCurrentTimeSeconds();
     }
 
     @Override
@@ -83,13 +85,18 @@ public class SwerveIOReal implements SwerveIO {
     @Override
     public void addVisionMeasurement(
             final Pose2d visionRobotPoseMeters,
-            final double timestampSeconds,
+            final double timestampSecondsCTRE,
             final Matrix<N3, N1> visionMeasurementStdDevs
     ) {
         drivetrain.addVisionMeasurement(
                 visionRobotPoseMeters,
-                Utils.fpgaToCurrentTime(timestampSeconds),
+                timestampSecondsCTRE,
                 visionMeasurementStdDevs
         );
+    }
+
+    @Override
+    public void setOperatorPerspectiveForward(final Rotation2d forwardDirection) {
+        drivetrain.setOperatorPerspectiveForward(forwardDirection);
     }
 }

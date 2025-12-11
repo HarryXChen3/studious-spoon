@@ -33,6 +33,7 @@ import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import frc.robot.Robot;
 import frc.robot.auto.Autos;
 import frc.robot.constants.Constants;
@@ -50,7 +51,6 @@ import org.littletonrobotics.junction.Logger;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.Optional;
-import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -64,6 +64,7 @@ public class Swerve extends SubsystemBase {
 
     private final Constants.RobotMode mode;
     private final LoggedTrigger.Group group;
+    private final LoggedTrigger allowedToChangeForwardDirection;
 
     private final SwerveIO swerveIO;
     private final SwerveIO.SwerveIOInputs inputs;
@@ -111,6 +112,7 @@ public class Swerve extends SubsystemBase {
     private final PIDController holdAxisPID;
 
     private final HolonomicChoreoController choreoController;
+    private Rotation2d appliedForwardDirection;
 
 //    private final SysIdRoutine linearVoltageSysIdRoutine;
 //    private final SysIdRoutine linearTorqueCurrentSysIdRoutine;
@@ -134,6 +136,8 @@ public class Swerve extends SubsystemBase {
     ) {
         this.mode = mode;
         this.group = LoggedTrigger.Group.from(LogKey);
+        this.allowedToChangeForwardDirection =
+                group.t("AllowedToChangeForwardDirection", RobotModeTriggers.disabled());
 
         this.swerveIO = switch (mode) {
             case REAL -> new SwerveIOReal(drivetrainConstants, moduleConstants);
@@ -227,20 +231,17 @@ public class Swerve extends SubsystemBase {
         Logger.processInputs(LogKey, inputs);
 
         final double odometryUpdatePeriodMs;
-//        if (isReplay()) {
+        if (isReplay()) {
             final double odometryUpdateStart = RobotController.getFPGATime();
 
             double updatePeriodSeconds = 0;
             for (final SwerveDriveState state : inputs.states) {
                 updatePeriodSeconds = odometryPeriodFilter.calculate(state.OdometryPeriod);
 
-                final double fpgaTimestamp = currentTimeToFPGATime(state.Timestamp);
-                Logger.recordOutput("CalculatedTimestamp", fpgaTimestamp);
-                Logger.recordOutput("StateTimestamp", state.Timestamp);
                 poseBuffer.addSample(
-                        fpgaTimestamp,
+                        currentTimeToFPGATime(state.Timestamp),
                         replayPoseEstimator.updateWithTime(
-                                Timer.getTimestamp(),
+                                state.Timestamp,
                                 state.RawHeading,
                                 state.ModulePositions
                         )
@@ -251,21 +252,28 @@ public class Swerve extends SubsystemBase {
                     RobotController.getFPGATime() - odometryUpdateStart
             );
             odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds) + replayUpdatePeriodMs;
-//        } else {
-//            double updatePeriodSeconds = 0;
-//            for (final SwerveDriveState state : inputs.states) {
-//                updatePeriodSeconds = odometryPeriodFilter.calculate(state.OdometryPeriod);
-//                poseBuffer.addSample(currentTimeToFPGATime(state.Timestamp), state.Pose);
-//            }
-//
-//            odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds);
-//        }
+        } else {
+            double updatePeriodSeconds = 0;
+            for (final SwerveDriveState state : inputs.states) {
+                updatePeriodSeconds = odometryPeriodFilter.calculate(state.OdometryPeriod);
+                poseBuffer.addSample(currentTimeToFPGATime(state.Timestamp), state.Pose);
+            }
+
+            odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds);
+        }
         Logger.recordOutput(OdometryLogKey + "/OdometryUpdatePeriodMs", odometryUpdatePeriodMs);
 
-        Logger.recordOutput("CTRETimestamp", Utils.getCurrentTimeSeconds());
-        Logger.recordOutput("TimerTimestamp", Timer.getTimestamp());
+        if (appliedForwardDirection == null || allowedToChangeForwardDirection.getAsBoolean()) {
+            final Rotation2d forwardDirection = Robot.IsRedAlliance.getAsBoolean()
+                    ? Rotation2d.k180deg
+                    : Rotation2d.kZero;
 
-        //log current swerve chassis speeds
+            if (!forwardDirection.equals(appliedForwardDirection)) {
+                swerveIO.setOperatorPerspectiveForward(forwardDirection);
+                appliedForwardDirection = forwardDirection;
+            }
+        }
+
         final ChassisSpeeds robotRelativeSpeeds = getRobotRelativeSpeeds();
         Logger.recordOutput(
                 LogKey + "/LinearSpeedMetersPerSecond",
@@ -279,7 +287,6 @@ public class Swerve extends SubsystemBase {
 
         final Pose2d robotPose = getPose();
         Logger.recordOutput(OdometryLogKey + "/Robot2d", robotPose);
-        Logger.recordOutput(OdometryLogKey + "/ReplayPoseEstimator", replayPoseEstimator.getEstimatedPosition());
         Logger.recordOutput(OdometryLogKey + "/Robot3d", GyroUtils.robotPose2dToPose3dWithGyro(
                 robotPose,
                 getRotation3d()
@@ -325,9 +332,9 @@ public class Swerve extends SubsystemBase {
      * @return the estimated position of the robot, as a {@link Pose2d}
      */
     public Pose2d getPose() {
-//        if (isReplay()) {
-//            return replayPoseEstimator.getEstimatedPosition();
-//        }
+        if (isReplay()) {
+            return replayPoseEstimator.getEstimatedPosition();
+        }
         return fromLatestState(state -> state.Pose, Pose2d.kZero);
     }
 
@@ -375,87 +382,100 @@ public class Swerve extends SubsystemBase {
      * Use {@link frc.robot.subsystems.vision.PhotonVision#resetPose(Pose2d)} instead.
      */
     public void resetPose(final Pose2d pose) {
-//        if (isReplay()) {
+        if (isReplay()) {
             replayPoseEstimator.resetPose(pose);
-//        }
+        }
         swerveIO.resetPose(pose);
     }
 
     public double fpgaToCurrentTime(final double fpgaTimeSeconds) {
-//        if (isReplay()) {
-            return (inputs.timestamp - Timer.getTimestamp()) + fpgaTimeSeconds;
-//        } else {
-//            return (inputs.timestamp - Timer.getFPGATimestamp()) + fpgaTimeSeconds;
-//        }
+        if (isReplay()) {
+            return (inputs.currentTimeSecondsCTRE - Timer.getTimestamp()) + fpgaTimeSeconds;
+        } else {
+            return (Utils.getCurrentTimeSeconds() - Timer.getFPGATimestamp()) + fpgaTimeSeconds;
+        }
     }
 
     public double currentTimeToFPGATime(final double currentTimeSeconds) {
-//        if (isReplay()) {
-            return (Timer.getTimestamp() - inputs.timestamp) + currentTimeSeconds;
-//        } else {
-//            return (Timer.getFPGATimestamp() - inputs.timestamp) + currentTimeSeconds;
-//        }
+        if (isReplay()) {
+            return (Timer.getTimestamp() - inputs.currentTimeSecondsCTRE) + currentTimeSeconds;
+        } else {
+            return (Timer.getFPGATimestamp() - Utils.getCurrentTimeSeconds()) + currentTimeSeconds;
+        }
     }
 
     public void addVisionMeasurement(
-            Pose2d visionRobotPoseMeters,
-            double timestampSeconds,
-            Matrix<N3, N1> visionMeasurementStdDevs
+            final Pose2d visionRobotPoseMeters,
+            final double timestampSeconds,
+            final Matrix<N3, N1> visionMeasurementStdDevs
     ) {
-        visionRobotPoseMeters = new Pose2d(2, 2, Rotation2d.kZero);
-        timestampSeconds = Timer.getTimestamp();
-        visionMeasurementStdDevs = VecBuilder.fill(0.6, 0.6, Units.degreesToRadians(80));
-//        if (isReplay()) {
+        final double timestampSecondsCTRE = fpgaToCurrentTime(timestampSeconds);
+        if (isReplay()) {
             replayPoseEstimator.addVisionMeasurement(
                     visionRobotPoseMeters,
-                    timestampSeconds,
-//                    fpgaToCurrentTime(timestampSeconds),
+                    timestampSecondsCTRE,
                     visionMeasurementStdDevs
             );
-//        }
-        swerveIO.addVisionMeasurement(visionRobotPoseMeters, timestampSeconds, visionMeasurementStdDevs);
+        }
+
+        swerveIO.addVisionMeasurement(
+                visionRobotPoseMeters,
+                timestampSecondsCTRE,
+                visionMeasurementStdDevs
+        );
     }
 
     public void applyRequest(final SwerveRequest request) {
         swerveIO.setControl(request);
     }
 
-    public void drive(
+    public void driveFieldRelative(
             final double xSpeedMeterPerSec,
             final double ySpeedMetersPerSec,
             final double omegaRadsPerSec,
-            final boolean fieldRelative,
-            final boolean invertYaw
+            final SwerveRequest.ForwardPerspectiveValue forwardPerspective
     ) {
-        final SwerveRequest request;
-        if (fieldRelative) {
-            request = driveFieldRelative
-                    .withVelocityX(invertYaw ? -xSpeedMeterPerSec : xSpeedMeterPerSec)
-                    .withVelocityY(invertYaw ? -ySpeedMetersPerSec : ySpeedMetersPerSec)
-                    .withRotationalRate(invertYaw ? -omegaRadsPerSec : omegaRadsPerSec);
-        } else {
-            request = driveRobotRelative
-                    .withVelocityX(xSpeedMeterPerSec)
-                    .withVelocityY(ySpeedMetersPerSec)
-                    .withRotationalRate(omegaRadsPerSec);
-        }
-
-        applyRequest(request);
+        applyRequest(driveFieldRelative
+                .withVelocityX(xSpeedMeterPerSec)
+                .withVelocityY(ySpeedMetersPerSec)
+                .withRotationalRate(omegaRadsPerSec)
+                .withForwardPerspective(forwardPerspective));
     }
 
-    public Command drive(
+    public void driveRobotRelative(
+            final double xSpeedMeterPerSec,
+            final double ySpeedMetersPerSec,
+            final double omegaRadsPerSec
+    ) {
+        applyRequest(driveRobotRelative
+                .withVelocityX(xSpeedMeterPerSec)
+                .withVelocityY(ySpeedMetersPerSec)
+                .withRotationalRate(omegaRadsPerSec));
+    }
+
+    public Command driveFieldRelative(
             final DoubleSupplier xSpeedMeterPerSec,
             final DoubleSupplier ySpeedMetersPerSec,
             final DoubleSupplier omegaRadsPerSec,
-            final boolean fieldRelative,
-            final boolean invertYaw
+            final SwerveRequest.ForwardPerspectiveValue forwardPerspective
     ) {
-        return run(() -> drive(
+        return run(() -> driveFieldRelative(
                 xSpeedMeterPerSec.getAsDouble(),
                 ySpeedMetersPerSec.getAsDouble(),
                 omegaRadsPerSec.getAsDouble(),
-                fieldRelative,
-                invertYaw
+                forwardPerspective
+        ));
+    }
+
+    public Command driveRobotRelative(
+            final DoubleSupplier xSpeedMeterPerSec,
+            final DoubleSupplier ySpeedMetersPerSec,
+            final DoubleSupplier omegaRadsPerSec
+    ) {
+        return run(() -> driveRobotRelative(
+                xSpeedMeterPerSec.getAsDouble(),
+                ySpeedMetersPerSec.getAsDouble(),
+                omegaRadsPerSec.getAsDouble()
         ));
     }
 
@@ -474,8 +494,7 @@ public class Swerve extends SubsystemBase {
     public Command teleopDriveCommand(
             final DoubleSupplier xSpeedSupplier,
             final DoubleSupplier ySpeedSupplier,
-            final DoubleSupplier rotSupplier,
-            final BooleanSupplier invertYaw
+            final DoubleSupplier rotSupplier
     ) {
         return run(() -> {
             final SwerveSpeed.Speeds swerveSpeed = SwerveSpeed.getSwerveSpeed();
@@ -491,15 +510,14 @@ public class Swerve extends SubsystemBase {
                     0.01
             );
 
-            drive(
+            driveFieldRelative(
                     translationInput.getX()
                             * swerveSpeed.getTranslationSpeed(),
                     translationInput.getY()
                             * swerveSpeed.getTranslationSpeed(),
                     rotationInput
                             * swerveSpeed.getRotationSpeed(),
-                    true,
-                    invertYaw.getAsBoolean()
+                    SwerveRequest.ForwardPerspectiveValue.OperatorPerspective
             );
         }).withName("TeleopDrive");
     }
@@ -524,14 +542,13 @@ public class Swerve extends SubsystemBase {
                             );
 
                             this.headingTarget = rotationTargetSupplier.get();
-                            drive(
+                            driveFieldRelative(
                                     translationInput.getX()
                                             * swerveSpeed.getTranslationSpeed(),
                                     translationInput.getY()
                                             * swerveSpeed.getTranslationSpeed(),
                                     headingController.calculate(getYaw().getRadians(), headingTarget.getRadians()),
-                                    true,
-                                    Robot.IsRedAlliance.getAsBoolean()
+                                    SwerveRequest.ForwardPerspectiveValue.OperatorPerspective
                             );
                         })
                 )
@@ -551,12 +568,10 @@ public class Swerve extends SubsystemBase {
                         }),
                         run(() -> {
                             this.headingTarget = rotationTargetSupplier.get();
-                            drive(
+                            driveRobotRelative(
                                     xSpeedSupplier.getAsDouble(),
                                     ySpeedSupplier.getAsDouble(),
-                                    headingController.calculate(getYaw().getRadians(), headingTarget.getRadians()),
-                                    false,
-                                    Robot.IsRedAlliance.getAsBoolean()
+                                    headingController.calculate(getYaw().getRadians(), headingTarget.getRadians())
                             );
                         })
                 )
@@ -572,12 +587,11 @@ public class Swerve extends SubsystemBase {
                         }),
                         run(() -> {
                             this.headingTarget = rotationTargetSupplier.get();
-                            drive(
+                            driveFieldRelative(
                                     0,
                                     0,
                                     headingController.calculate(getYaw().getRadians(), headingTarget.getRadians()),
-                                    true,
-                                    false
+                                    SwerveRequest.ForwardPerspectiveValue.BlueAlliance
                             );
                         })
                 )
@@ -643,12 +657,11 @@ public class Swerve extends SubsystemBase {
 
                             final double xSpeed = holdAxis == DriveAxis.X ? holdEffort : speedSupplier.getAsDouble();
                             final double ySpeed = holdAxis == DriveAxis.Y ? holdEffort : speedSupplier.getAsDouble();
-                            drive(
+                            driveFieldRelative(
                                     xSpeed,
                                     ySpeed,
                                     headingController.calculate(getYaw().getRadians(), headingTarget.getRadians()),
-                                    true,
-                                    false
+                                    SwerveRequest.ForwardPerspectiveValue.BlueAlliance
                             );
                         })
                 )
@@ -681,12 +694,11 @@ public class Swerve extends SubsystemBase {
 
                             final double xSpeed = holdAxis == DriveAxis.X ? holdEffort : driveSpeed;
                             final double ySpeed = holdAxis == DriveAxis.Y ? holdEffort : driveSpeed;
-                            drive(
+                            driveFieldRelative(
                                     xSpeed,
                                     ySpeed,
                                     headingController.calculate(getYaw().getRadians(), this.headingTarget.getRadians()),
-                                    true,
-                                    false
+                                    SwerveRequest.ForwardPerspectiveValue.BlueAlliance
                             );
                         })
                 )
@@ -725,12 +737,11 @@ public class Swerve extends SubsystemBase {
 
                             final double xSpeed = holdAxis == DriveAxis.X ? holdEffort : 0;
                             final double ySpeed = holdAxis == DriveAxis.Y ? holdEffort : 0;
-                            drive(
+                            driveFieldRelative(
                                     xSpeed,
                                     ySpeed,
                                     headingController.calculate(getYaw().getRadians(), this.headingTarget.getRadians()),
-                                    true,
-                                    false
+                                    SwerveRequest.ForwardPerspectiveValue.BlueAlliance
                             );
                         })
                 ).until(atAxis)

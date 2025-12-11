@@ -335,8 +335,7 @@ public class Robot extends LoggedRobot {
                 swerve.teleopDriveCommand(
                         driverController::getLeftY,
                         driverController::getLeftX,
-                        driverController::getRightX,
-                        IsRedAlliance
+                        driverController::getRightX
                 )
         );
     }

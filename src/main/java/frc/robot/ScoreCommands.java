@@ -369,7 +369,7 @@ public class ScoreCommands {
                         swerve.runToPose(descorePoseSupplier)
                                 .until(gamepieceState.intakeHasAlgae),
                         Commands.waitSeconds(0.2),
-                        swerve.drive(() -> -0.8, () -> 0, () -> 0, false, false)
+                        swerve.driveRobotRelative(() -> -0.8, () -> 0, () -> 0)
                                 .withTimeout(0.35)
                 ),
                 superstructure.toGoal(Superstructure.Goal.UPPER_ALGAE),

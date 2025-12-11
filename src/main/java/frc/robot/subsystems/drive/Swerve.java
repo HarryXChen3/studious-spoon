@@ -80,8 +80,7 @@ public class Swerve extends SubsystemBase {
             .withDriveRequestType(SwerveModule.DriveRequestType.Velocity)
             .withSteerRequestType(SwerveModule.SteerRequestType.Position)
             .withDesaturateWheelSpeeds(true)
-            .withCenterOfRotation(Config.centerOfRotationMeters())
-            .withForwardPerspective(SwerveRequest.ForwardPerspectiveValue.BlueAlliance);
+            .withCenterOfRotation(Config.centerOfRotationMeters());
 
     private final SwerveRequest.RobotCentric driveRobotRelative = new SwerveRequest.RobotCentric()
             .withDriveRequestType(SwerveModule.DriveRequestType.Velocity)

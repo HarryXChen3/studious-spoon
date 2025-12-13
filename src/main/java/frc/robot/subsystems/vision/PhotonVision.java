@@ -3,11 +3,9 @@ package frc.robot.subsystems.vision;
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.Vector;
-import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Pose3d;
-import edu.wpi.first.math.geometry.Rotation3d;
-import edu.wpi.first.math.geometry.Twist2d;
+import edu.wpi.first.math.geometry.*;
 import edu.wpi.first.math.kinematics.SwerveDriveOdometry;
+import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.RobotController;
@@ -90,9 +88,14 @@ public class PhotonVision extends VirtualSubsystem {
                         swerve,
                         new SwerveDriveOdometry(
                                 swerve.getKinematics(),
-                                swerve.getYaw(),
-                                swerve.getModulePositions(),
-                                swerve.getPose()
+                                Rotation2d.kZero,
+                                new SwerveModulePosition[] {
+                                        new SwerveModulePosition(),
+                                        new SwerveModulePosition(),
+                                        new SwerveModulePosition(),
+                                        new SwerveModulePosition()
+                                },
+                                Pose2d.kZero
                         ),
                         PhotonVision.apriltagFieldLayout,
                         visionSystemSim,
@@ -121,10 +124,10 @@ public class PhotonVision extends VirtualSubsystem {
         };
 
         this.swerve = swerve;
+        this.swerve.onStateValid(state -> resetPose(swerve.getPose()));
         this.aprilTagVisionIOInputsMap = runner.getApriltagVisionIOInputsMap();
 
         this.lastVisionUpdateMap = new HashMap<>();
-        resetPose(swerve.getPose());
     }
 
     public enum RejectionReason {

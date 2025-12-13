@@ -67,6 +67,12 @@ public interface SwerveIO {
             }
         }
 
+        /**
+         * Call {@link Swerve#getPose()} instead.
+         * Directly accessing this {@link Pose2d} is nondeterministic in replay.
+         */
+        protected Pose2d Pose;
+
         private SwerveDriveState() {}
 
         public SwerveDriveState(final SwerveDrivetrain.SwerveDriveState state) {

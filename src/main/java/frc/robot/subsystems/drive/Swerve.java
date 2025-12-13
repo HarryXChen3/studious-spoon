@@ -10,7 +10,6 @@ import com.ctre.phoenix6.swerve.SwerveModuleConstants;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.Matrix;
-import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.filter.LinearFilter;
@@ -51,7 +50,10 @@ import org.littletonrobotics.junction.Logger;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 
@@ -72,6 +74,9 @@ public class Swerve extends SubsystemBase {
     private final SwerveDriveKinematics kinematics;
     private final SwerveDrivePoseEstimator replayPoseEstimator;
     private boolean replayPoseEstimatorReset = false;
+
+    private boolean stateLastValid = false;
+    private final List<Consumer<SwerveDriveState>> onStateValidCallbacks = new ArrayList<>();
 
     private final LinearFilter odometryPeriodFilter = LinearFilter.movingAverage(20);
     private final TimeInterpolatableBuffer<Pose2d> poseBuffer =
@@ -163,7 +168,7 @@ public class Swerve extends SubsystemBase {
                 },
                 Pose2d.kZero,
                 SwerveConstants.CTRESwerve.OdometryStdDevs,
-                VecBuilder.fill(0.6, 0.6, Units.degreesToRadians(80))
+                SwerveConstants.CTRESwerve.UnusedVisionStdDevs
         );
 
         this.headingController = new PIDController(4, 0, 0);
@@ -228,6 +233,24 @@ public class Swerve extends SubsystemBase {
 //        this.angularVoltageSysIdRoutine = makeAngularVoltageSysIdRoutine();
     }
 
+    private boolean isReplay() {
+        return mode == Constants.RobotMode.REPLAY;
+    }
+
+    private void updateStateValidCallbacks() {
+        final boolean stateValid = inputs.stateValid;
+        if (!stateLastValid && stateValid) {
+            final SwerveDriveState state = state();
+            for (final Consumer<SwerveDriveState> callbacks : onStateValidCallbacks) {
+                callbacks.accept(state);
+            }
+
+            onStateValidCallbacks.clear();
+        }
+
+        stateLastValid = stateValid;
+    }
+
     private double updateOdometry() {
         final double odometryUpdatePeriodSeconds;
         if (isReplay()) {
@@ -275,7 +298,7 @@ public class Swerve extends SubsystemBase {
         Logger.processInputs(LogKey, inputs);
 
         final double odometryUpdatePeriodSeconds = updateOdometry();
-        Logger.recordOutput(OdometryLogKey + "/OdometryUpdatePeriodSeconds", odometryUpdatePeriodSeconds);
+        updateStateValidCallbacks();
 
         if (appliedForwardDirection == null || allowedToChangeForwardDirection.getAsBoolean()) {
             final Rotation2d forwardDirection = Robot.IsRedAlliance.getAsBoolean()
@@ -288,7 +311,9 @@ public class Swerve extends SubsystemBase {
             }
         }
 
+        final Pose2d robotPose = getPose();
         final ChassisSpeeds robotRelativeSpeeds = getRobotRelativeSpeeds();
+
         Logger.recordOutput(
                 LogKey + "/LinearSpeedMetersPerSecond",
                 Math.hypot(robotRelativeSpeeds.vxMetersPerSecond, robotRelativeSpeeds.vyMetersPerSecond)
@@ -299,7 +324,6 @@ public class Swerve extends SubsystemBase {
         Logger.recordOutput(LogKey + "/DesiredStates", getModuleLastDesiredStates());
         Logger.recordOutput(LogKey + "/CurrentStates", getModuleStates());
 
-        final Pose2d robotPose = getPose();
         Logger.recordOutput(OdometryLogKey + "/Robot2d", robotPose);
         Logger.recordOutput(OdometryLogKey + "/Robot3d", GyroUtils.robotPose2dToPose3dWithGyro(
                 robotPose,
@@ -322,6 +346,7 @@ public class Swerve extends SubsystemBase {
                 atHolonomicDrivePoseStopped.getAsBoolean()
         );
 
+        Logger.recordOutput(OdometryLogKey + "/OdometryUpdatePeriodSeconds", odometryUpdatePeriodSeconds);
         Logger.recordOutput(
                 LogKey + "/PeriodicIOPeriodMs",
                 LogUtils.microsecondsToMilliseconds(RobotController.getFPGATime() - swervePeriodicUpdateStart)
@@ -332,16 +357,20 @@ public class Swerve extends SubsystemBase {
         return kinematics;
     }
 
-    private boolean isReplay() {
-        return mode == Constants.RobotMode.REPLAY;
-    }
-
     public SwerveDriveState state() {
         if (!inputs.stateValid) {
             DriverStation.reportError("Tried to read invalid SwerveDriveState", true);
         }
 
         return inputs.state;
+    }
+
+    public void onStateValid(final Consumer<SwerveDriveState> callback) {
+        if (inputs.stateValid) {
+            callback.accept(state());
+        } else {
+            onStateValidCallbacks.add(callback);
+        }
     }
 
     /**
@@ -444,7 +473,7 @@ public class Swerve extends SubsystemBase {
         );
     }
 
-    public void applyRequest(final SwerveRequest request) {
+    private void applyRequest(final SwerveRequest request) {
         swerveIO.setControl(request);
     }
 

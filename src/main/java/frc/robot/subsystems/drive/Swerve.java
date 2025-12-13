@@ -28,6 +28,7 @@ import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.math.util.Units;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -52,7 +53,6 @@ import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.Optional;
 import java.util.function.DoubleSupplier;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static frc.robot.subsystems.drive.constants.SwerveConstants.Config;
@@ -71,6 +71,7 @@ public class Swerve extends SubsystemBase {
 
     private final SwerveDriveKinematics kinematics;
     private final SwerveDrivePoseEstimator replayPoseEstimator;
+    private boolean replayPoseEstimatorReset = false;
 
     private final LinearFilter odometryPeriodFilter = LinearFilter.movingAverage(20);
     private final TimeInterpolatableBuffer<Pose2d> poseBuffer =
@@ -154,9 +155,14 @@ public class Swerve extends SubsystemBase {
         this.replayPoseEstimator = new SwerveDrivePoseEstimator(
                 kinematics,
                 Rotation2d.kZero,
-                getModulePositions(),
+                new SwerveModulePosition[] {
+                        new SwerveModulePosition(),
+                        new SwerveModulePosition(),
+                        new SwerveModulePosition(),
+                        new SwerveModulePosition(),
+                },
                 Pose2d.kZero,
-                Constants.Vision.STATE_STD_DEVS,
+                SwerveConstants.CTRESwerve.OdometryStdDevs,
                 VecBuilder.fill(0.6, 0.6, Units.degreesToRadians(80))
         );
 
@@ -222,21 +228,21 @@ public class Swerve extends SubsystemBase {
 //        this.angularVoltageSysIdRoutine = makeAngularVoltageSysIdRoutine();
     }
 
-    @Override
-    public void periodic() {
-        final double swervePeriodicUpdateStart = RobotController.getFPGATime();
-
-        swerveIO.updateInputs(inputs);
-        Logger.processInputs(LogKey, inputs);
-
-        final double odometryUpdatePeriodMs;
+    private double updateOdometry() {
+        final double odometryUpdatePeriodSeconds;
         if (isReplay()) {
-            final double odometryUpdateStart = RobotController.getFPGATime();
+            final double odometryUpdateStart = Timer.getFPGATimestamp();
+
+            final SwerveDriveState[] states = inputs.states;
+            if (!replayPoseEstimatorReset && states.length != 0) {
+                final SwerveDriveState oldestState = states[0];
+                replayPoseEstimator.resetPosition(oldestState.RawHeading, oldestState.ModulePositions, oldestState.Pose);
+                replayPoseEstimatorReset = true;
+            }
 
             double updatePeriodSeconds = 0;
-            for (final SwerveDriveState state : inputs.states) {
+            for (final SwerveDriveState state : states) {
                 updatePeriodSeconds = odometryPeriodFilter.calculate(state.OdometryPeriod);
-
                 poseBuffer.addSample(
                         currentTimeToFPGATime(state.Timestamp),
                         replayPoseEstimator.updateWithTime(
@@ -247,10 +253,7 @@ public class Swerve extends SubsystemBase {
                 );
             }
 
-            final double replayUpdatePeriodMs = LogUtils.microsecondsToMilliseconds(
-                    RobotController.getFPGATime() - odometryUpdateStart
-            );
-            odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds) + replayUpdatePeriodMs;
+            odometryUpdatePeriodSeconds = updatePeriodSeconds + (Timer.getFPGATimestamp() - odometryUpdateStart);
         } else {
             double updatePeriodSeconds = 0;
             for (final SwerveDriveState state : inputs.states) {
@@ -258,9 +261,21 @@ public class Swerve extends SubsystemBase {
                 poseBuffer.addSample(currentTimeToFPGATime(state.Timestamp), state.Pose);
             }
 
-            odometryUpdatePeriodMs = Units.secondsToMilliseconds(updatePeriodSeconds);
+            odometryUpdatePeriodSeconds = updatePeriodSeconds;
         }
-        Logger.recordOutput(OdometryLogKey + "/OdometryUpdatePeriodMs", odometryUpdatePeriodMs);
+
+        return odometryUpdatePeriodSeconds;
+    }
+
+    @Override
+    public void periodic() {
+        final double swervePeriodicUpdateStart = RobotController.getFPGATime();
+
+        swerveIO.updateInputs(inputs);
+        Logger.processInputs(LogKey, inputs);
+
+        final double odometryUpdatePeriodSeconds = updateOdometry();
+        Logger.recordOutput(OdometryLogKey + "/OdometryUpdatePeriodSeconds", odometryUpdatePeriodSeconds);
 
         if (appliedForwardDirection == null || allowedToChangeForwardDirection.getAsBoolean()) {
             final Rotation2d forwardDirection = Robot.IsRedAlliance.getAsBoolean()
@@ -321,9 +336,12 @@ public class Swerve extends SubsystemBase {
         return mode == Constants.RobotMode.REPLAY;
     }
 
-    public <T> T fromLatestState(final Function<SwerveDriveState, T> from, final T orElse) {
-        final SwerveDriveState[] states = inputs.states;
-        return states.length != 0 ? from.apply(states[0]) : orElse;
+    public SwerveDriveState state() {
+        if (!inputs.stateValid) {
+            DriverStation.reportError("Tried to read invalid SwerveDriveState", true);
+        }
+
+        return inputs.state;
     }
 
     /**
@@ -334,7 +352,7 @@ public class Swerve extends SubsystemBase {
         if (isReplay()) {
             return replayPoseEstimator.getEstimatedPosition();
         }
-        return fromLatestState(state -> state.Pose, Pose2d.kZero);
+        return state().Pose;
     }
 
     public Optional<Pose2d> getPose(final double atTimestamp) {
@@ -358,7 +376,7 @@ public class Swerve extends SubsystemBase {
     }
 
     public ChassisSpeeds getRobotRelativeSpeeds() {
-        return fromLatestState(s -> s.Speeds, SwerveDriveState.EmptyState.Speeds);
+        return state().Speeds;
     }
 
     public ChassisSpeeds getFieldRelativeSpeeds() {
@@ -366,15 +384,15 @@ public class Swerve extends SubsystemBase {
     }
 
     public SwerveModuleState[] getModuleStates() {
-        return fromLatestState(s -> s.ModuleStates, SwerveDriveState.EmptyState.ModuleStates);
+        return state().ModuleStates;
     }
 
     public SwerveModuleState[] getModuleLastDesiredStates() {
-        return fromLatestState(s -> s.ModuleTargets, SwerveDriveState.EmptyState.ModuleTargets);
+        return state().ModuleTargets;
     }
 
     public SwerveModulePosition[] getModulePositions() {
-        return fromLatestState(s -> s.ModulePositions, SwerveDriveState.EmptyState.ModulePositions);
+        return state().ModulePositions;
     }
 
     /**
@@ -389,17 +407,19 @@ public class Swerve extends SubsystemBase {
 
     public double fpgaToCurrentTime(final double fpgaTimeSeconds) {
         if (isReplay()) {
-            return (inputs.currentTimeSecondsCTRE - Timer.getTimestamp()) + fpgaTimeSeconds;
+            return (inputs.currentTimeSeconds - Timer.getTimestamp()) + fpgaTimeSeconds;
         } else {
             return (Utils.getCurrentTimeSeconds() - Timer.getFPGATimestamp()) + fpgaTimeSeconds;
+//            return (inputs.currentTimeSeconds - Timer.getTimestamp()) + fpgaTimeSeconds;
         }
     }
 
     public double currentTimeToFPGATime(final double currentTimeSeconds) {
         if (isReplay()) {
-            return (Timer.getTimestamp() - inputs.currentTimeSecondsCTRE) + currentTimeSeconds;
+            return (Timer.getTimestamp() - inputs.currentTimeSeconds) + currentTimeSeconds;
         } else {
             return (Timer.getFPGATimestamp() - Utils.getCurrentTimeSeconds()) + currentTimeSeconds;
+//            return (Timer.getTimestamp() - inputs.currentTimeSeconds) + currentTimeSeconds;
         }
     }
 

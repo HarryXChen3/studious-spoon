@@ -22,9 +22,14 @@ import static frc.robot.subsystems.drive.constants.SwerveConstants.ModuleCount;
 public interface SwerveIO {
     @AutoLog
     class SwerveIOInputs {
+        public boolean stateValid = false;
+        public int bufferMaxSize = 0;
+        public int bufferOverflowCount = 0;
+        public SwerveDriveState state = SwerveDriveState.EmptyState;
         public SwerveDriveState[] states = new SwerveDriveState[0];
+
         public Rotation3d gyroRotation3d = Rotation3d.kZero;
-        public double currentTimeSecondsCTRE = 0;
+        public double currentTimeSeconds = 0;
     }
 
     /**
@@ -62,7 +67,7 @@ public interface SwerveIO {
             }
         }
 
-        public SwerveDriveState() {}
+        private SwerveDriveState() {}
 
         public SwerveDriveState(final SwerveDrivetrain.SwerveDriveState state) {
             this.Pose = state.Pose;

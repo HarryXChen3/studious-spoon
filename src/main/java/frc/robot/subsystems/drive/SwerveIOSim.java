@@ -17,6 +17,7 @@ import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.util.CircularBuffer;
 import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.RobotController;
+import edu.wpi.first.wpilibj.Timer;
 import frc.robot.subsystems.drive.constants.SwerveConstants.CTRESwerve;
 import frc.robot.utils.closeables.ToClose;
 import frc.robot.utils.control.DeltaTime;
@@ -97,9 +98,12 @@ public class SwerveIOSim implements SwerveIO {
         }
 
         final int nStates = freeBuffer.size();
+//        final double[] fpgaTimestamps = new double[nStates];
         final SwerveDriveState[] states = new SwerveDriveState[nStates];
         for (int i = 0; i < nStates; i++) {
-            states[i] = new SwerveDriveState(freeBuffer.removeFirst());
+            final SwerveDrivetrain.SwerveDriveState state = freeBuffer.removeFirst();
+//            fpgaTimestamps[i] = Utils.currentTimeToFPGATime(state.Timestamp);
+            states[i] = new SwerveDriveState(state);
         }
 
         final boolean hasValidState = nStates > 0;
@@ -111,7 +115,10 @@ public class SwerveIOSim implements SwerveIO {
         }
         inputs.states = states;
         inputs.gyroRotation3d = drivetrain.getRotation3d();
+        inputs.fpgaTimeSeconds = Timer.getFPGATimestamp();
         inputs.currentTimeSeconds = Utils.getCurrentTimeSeconds();
+
+//        inputs.fpgaTimestamps = fpgaTimestamps;
     }
 
     @Override
@@ -127,12 +134,12 @@ public class SwerveIOSim implements SwerveIO {
     @Override
     public void addVisionMeasurement(
             final Pose2d visionRobotPoseMeters,
-            final double timestampSecondsCTRE,
+            final double currentTimestampSeconds,
             final Matrix<N3, N1> visionMeasurementStdDevs
     ) {
         drivetrain.addVisionMeasurement(
                 visionRobotPoseMeters,
-                timestampSecondsCTRE,
+                currentTimestampSeconds,
                 visionMeasurementStdDevs
         );
     }

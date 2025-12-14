@@ -1,7 +1,6 @@
 package frc.robot.subsystems.drive;
 
 import choreo.trajectory.SwerveSample;
-import com.ctre.phoenix6.Utils;
 import com.ctre.phoenix6.configs.CANcoderConfiguration;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.swerve.SwerveDrivetrainConstants;
@@ -14,10 +13,7 @@ import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.filter.LinearFilter;
 import edu.wpi.first.math.filter.SlewRateLimiter;
-import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Rotation2d;
-import edu.wpi.first.math.geometry.Rotation3d;
-import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.math.geometry.*;
 import edu.wpi.first.math.interpolation.TimeInterpolatableBuffer;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
@@ -74,6 +70,9 @@ public class Swerve extends SubsystemBase {
     private final SwerveDriveKinematics kinematics;
     private final SwerveDrivePoseEstimator replayPoseEstimator;
     private boolean replayPoseEstimatorReset = false;
+
+//    private final SwerveDrivePoseEstimator replayFPGATimePoseEstimator;
+//    private boolean replayFPGATimePoseEstimatorReset = false;
 
     private boolean stateLastValid = false;
     private final List<Consumer<SwerveDriveState>> onStateValidCallbacks = new ArrayList<>();
@@ -171,6 +170,20 @@ public class Swerve extends SubsystemBase {
                 SwerveConstants.CTRESwerve.UnusedVisionStdDevs
         );
 
+//        this.replayFPGATimePoseEstimator = new SwerveDrivePoseEstimator(
+//                kinematics,
+//                Rotation2d.kZero,
+//                new SwerveModulePosition[] {
+//                        new SwerveModulePosition(),
+//                        new SwerveModulePosition(),
+//                        new SwerveModulePosition(),
+//                        new SwerveModulePosition(),
+//                },
+//                Pose2d.kZero,
+//                SwerveConstants.CTRESwerve.OdometryStdDevs,
+//                SwerveConstants.CTRESwerve.UnusedVisionStdDevs
+//        );
+
         this.headingController = new PIDController(4, 0, 0);
         this.headingController.enableContinuousInput(-Math.PI, Math.PI);
         this.headingController.setTolerance(Units.degreesToRadians(4), Units.degreesToRadians(6));
@@ -237,6 +250,14 @@ public class Swerve extends SubsystemBase {
         return mode == Constants.RobotMode.REPLAY;
     }
 
+    private double fpgaToCurrentTime(final double fpgaTimeSeconds) {
+        return (inputs.currentTimeSeconds - inputs.fpgaTimeSeconds) + fpgaTimeSeconds;
+    }
+
+    private double currentTimeToFPGATime(final double currentTimeSeconds) {
+        return (inputs.fpgaTimeSeconds - inputs.currentTimeSeconds) + currentTimeSeconds;
+    }
+
     private void updateStateValidCallbacks() {
         final boolean stateValid = inputs.stateValid;
         if (!stateLastValid && stateValid) {
@@ -263,8 +284,16 @@ public class Swerve extends SubsystemBase {
                 replayPoseEstimatorReset = true;
             }
 
+//            if (!replayFPGATimePoseEstimatorReset && states.length != 0) {
+//                final SwerveDriveState oldestState = states[0];
+//                replayFPGATimePoseEstimator.resetPosition(oldestState.RawHeading, oldestState.ModulePositions, oldestState.Pose);
+//                replayFPGATimePoseEstimatorReset = true;
+//            }
+
             double updatePeriodSeconds = 0;
             for (final SwerveDriveState state : states) {
+//            for (int i = 0; i < states.length; i++) {
+//                final SwerveDriveState state = states[i];
                 updatePeriodSeconds = odometryPeriodFilter.calculate(state.OdometryPeriod);
                 poseBuffer.addSample(
                         currentTimeToFPGATime(state.Timestamp),
@@ -274,6 +303,9 @@ public class Swerve extends SubsystemBase {
                                 state.ModulePositions
                         )
                 );
+
+//                replayFPGATimePoseEstimator.updateWithTime(
+//                        inputs.fpgaTimestamps[i], state.RawHeading, state.ModulePositions);
             }
 
             odometryUpdatePeriodSeconds = updatePeriodSeconds + (Timer.getFPGATimestamp() - odometryUpdateStart);
@@ -313,6 +345,11 @@ public class Swerve extends SubsystemBase {
 
         final Pose2d robotPose = getPose();
         final ChassisSpeeds robotRelativeSpeeds = getRobotRelativeSpeeds();
+
+        final Transform2d diff = robotPose.minus(state().Pose);
+        Logger.recordOutput("Diff", diff);
+
+//        Logger.recordOutput("FPGATimePoseEstimator", replayFPGATimePoseEstimator.getEstimatedPosition());
 
         Logger.recordOutput(
                 LogKey + "/LinearSpeedMetersPerSecond",
@@ -430,45 +467,31 @@ public class Swerve extends SubsystemBase {
     public void resetPose(final Pose2d pose) {
         if (isReplay()) {
             replayPoseEstimator.resetPose(pose);
+//            replayFPGATimePoseEstimator.resetPose(pose);
         }
         swerveIO.resetPose(pose);
     }
 
-    public double fpgaToCurrentTime(final double fpgaTimeSeconds) {
-        if (isReplay()) {
-            return (inputs.currentTimeSeconds - Timer.getTimestamp()) + fpgaTimeSeconds;
-        } else {
-            return (Utils.getCurrentTimeSeconds() - Timer.getFPGATimestamp()) + fpgaTimeSeconds;
-//            return (inputs.currentTimeSeconds - Timer.getTimestamp()) + fpgaTimeSeconds;
-        }
-    }
-
-    public double currentTimeToFPGATime(final double currentTimeSeconds) {
-        if (isReplay()) {
-            return (Timer.getTimestamp() - inputs.currentTimeSeconds) + currentTimeSeconds;
-        } else {
-            return (Timer.getFPGATimestamp() - Utils.getCurrentTimeSeconds()) + currentTimeSeconds;
-//            return (Timer.getTimestamp() - inputs.currentTimeSeconds) + currentTimeSeconds;
-        }
-    }
-
     public void addVisionMeasurement(
             final Pose2d visionRobotPoseMeters,
-            final double timestampSeconds,
+            final double fpgaTimestampSeconds,
             final Matrix<N3, N1> visionMeasurementStdDevs
     ) {
-        final double timestampSecondsCTRE = fpgaToCurrentTime(timestampSeconds);
+        final double currentTime = fpgaToCurrentTime(fpgaTimestampSeconds);
         if (isReplay()) {
             replayPoseEstimator.addVisionMeasurement(
                     visionRobotPoseMeters,
-                    timestampSecondsCTRE,
+                    currentTime,
                     visionMeasurementStdDevs
             );
+
+//            replayFPGATimePoseEstimator.addVisionMeasurement(
+//                    visionRobotPoseMeters, fpgaTimestampSeconds, visionMeasurementStdDevs);
         }
 
         swerveIO.addVisionMeasurement(
                 visionRobotPoseMeters,
-                timestampSecondsCTRE,
+                currentTime,
                 visionMeasurementStdDevs
         );
     }

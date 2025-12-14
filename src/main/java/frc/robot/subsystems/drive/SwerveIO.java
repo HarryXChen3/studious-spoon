@@ -29,7 +29,10 @@ public interface SwerveIO {
         public SwerveDriveState[] states = new SwerveDriveState[0];
 
         public Rotation3d gyroRotation3d = Rotation3d.kZero;
+        public double fpgaTimeSeconds = 0;
         public double currentTimeSeconds = 0;
+
+//        public double[] fpgaTimestamps = new double[0];
     }
 
     /**
@@ -46,7 +49,7 @@ public interface SwerveIO {
 
     default void addVisionMeasurement(
             final Pose2d visionRobotPoseMeters,
-            final double timestampSeconds,
+            final double currentTimestampSeconds,
             final Matrix<N3, N1> visionMeasurementStdDevs
     ) {}
 

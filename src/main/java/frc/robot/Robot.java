@@ -2,6 +2,7 @@ package frc.robot;
 
 import com.ctre.phoenix6.SignalLogger;
 import edu.wpi.first.hal.AllianceStationID;
+import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -90,7 +91,7 @@ public class Robot extends LoggedRobot {
     );
 
     public final PhotonVision photonVision = new PhotonVision(
-            Constants.CURRENT_MODE,
+            Constants.RobotMode.DISABLED,
             swerve
     );
 
@@ -512,8 +513,15 @@ public class Robot extends LoggedRobot {
 //                scoreCommands.intakeFacingClosestCoralStation(driverController::getLeftY, driverController::getLeftX)
 //        );
 
-        this.driverController.a(teleopEventLoop)
-                .whileTrue(scoreCommands.scoreAtFixedPosition(scorePositionSupplier));
+        this.driverController.a()
+                .whileTrue(Commands.run(() -> swerve.addVisionMeasurement(
+                        new Pose2d(3, 3, Rotation2d.kZero),
+                        Timer.getTimestamp(),
+                        VecBuilder.fill(0.6, 0.6, Units.degreesToRadians(60))
+                )));
+
+//        this.driverController.a(teleopEventLoop)
+//                .whileTrue(scoreCommands.scoreAtFixedPosition(scorePositionSupplier));
 
 //        this.driverController.a(teleopEventLoop)
 //                .whileTrue(scoreCommands.groundIntake())

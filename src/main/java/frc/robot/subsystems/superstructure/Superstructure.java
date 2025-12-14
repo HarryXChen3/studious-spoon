@@ -4,6 +4,7 @@ import edu.wpi.first.math.geometry.*;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.event.EventLoop;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import frc.robot.subsystems.superstructure.distal.IntakeArm;
@@ -210,18 +211,19 @@ public class Superstructure extends VirtualSubsystem {
         });
         this.desiresDownwardsMotion = desiresUpwardsMotion.negate();
 
+        final CommandScheduler scheduler = CommandScheduler.getInstance();
         final Command upwardsGoalChange = upwardsGoalChange();
         desiredGoalChanged.and(allowedToChangeGoal).and(desiresUpwardsMotion)
                 .onTrue(Commands.runOnce(() -> {
                     upwardsGoalChange.cancel();
-                    upwardsGoalChange.schedule();
+                    scheduler.schedule(upwardsGoalChange);
                 }).withName("ScheduleUpwardsGoalChange"));
 
         final Command downwardsGoalChange = downwardsGoalChange();
         desiredGoalChanged.and(allowedToChangeGoal).and(desiresDownwardsMotion)
                 .onTrue(Commands.runOnce(() -> {
                     downwardsGoalChange.cancel();
-                    downwardsGoalChange.schedule();
+                    scheduler.schedule(downwardsGoalChange);
                 }).withName("ScheduleDownwardsGoalChange"));
 
         elevatorArm.setGoal(desiredGoal.elevatorArmGoal);

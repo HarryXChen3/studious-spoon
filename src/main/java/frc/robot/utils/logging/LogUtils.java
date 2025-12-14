@@ -9,12 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class LogUtils {
-    public static final double MICRO_TO_MILLI = 1d / 1000;
-
-    public static double microsecondsToMilliseconds(final double microseconds) {
-        return microseconds * MICRO_TO_MILLI;
-    }
-
     public static void serializePhotonPipelineResults(
             final LogTable logTable,
             final String prefix,

@@ -7,8 +7,8 @@ import edu.wpi.first.math.geometry.*;
 import edu.wpi.first.math.kinematics.SwerveDriveOdometry;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.numbers.N3;
+import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.Filesystem;
-import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.constants.Constants;
@@ -18,7 +18,6 @@ import frc.robot.subsystems.vision.cameras.TitanCamera;
 import frc.robot.subsystems.vision.estimator.VisionResult;
 import frc.robot.utils.PoseUtils;
 import frc.robot.utils.gyro.GyroUtils;
-import frc.robot.utils.logging.LogUtils;
 import frc.robot.utils.subsystems.VirtualSubsystem;
 import org.littletonrobotics.junction.Logger;
 import org.photonvision.simulation.VisionSystemSim;
@@ -342,7 +341,7 @@ public class PhotonVision extends VirtualSubsystem {
 
     @Override
     public void periodic() {
-        final double visionIOPeriodicStart = RobotController.getFPGATime();
+        final double visionIOPeriodicStart = Timer.getFPGATimestamp();
         runner.periodic(swerve::getPose);
 
         // Update and log PhotonVision results
@@ -351,7 +350,7 @@ public class PhotonVision extends VirtualSubsystem {
 
         Logger.recordOutput(
                 PhotonLogKey + "/PeriodicIOPeriodMs",
-                LogUtils.microsecondsToMilliseconds(RobotController.getFPGATime() - visionIOPeriodicStart)
+                Units.secondsToMilliseconds(Timer.getFPGATimestamp() - visionIOPeriodicStart)
         );
     }
 

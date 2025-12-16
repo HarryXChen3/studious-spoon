@@ -188,8 +188,7 @@ public class Robot extends LoggedRobot {
             return rawScorePosition;
     };
 
-    @Override
-    public void robotInit() {
+    public Robot() {
         if ((RobotBase.isReal() && Constants.CURRENT_MODE != Constants.RobotMode.REAL) ||
                 (RobotBase.isSimulation() && Constants.CURRENT_MODE == Constants.RobotMode.REAL)) {
             DriverStation.reportWarning(
@@ -258,7 +257,7 @@ public class Robot extends LoggedRobot {
                 // log to working directory when running sim
                 // setPath doesn't seem to work in sim (path is ignored and hoot files are always sent to /logs)
 //                SignalLogger.setPath("/logs");
-                Logger.addDataReceiver(new WPILOGWriter(""));
+                Logger.addDataReceiver(new WPILOGWriter("logs"));
                 Logger.addDataReceiver(new NT4Publisher());
 
                 DriverStationSim.setAllianceStationId(AllianceStationID.Blue1);
@@ -316,6 +315,8 @@ public class Robot extends LoggedRobot {
 
         LoggedCommandScheduler.periodic();
         visualizer.periodic();
+
+        Logger.recordOutput("Timestamp", Timer.getTimestamp());
 
         Logger.recordOutput("RawScorePosition", rawScorePositionSupplier.get());
         Logger.recordOutput("ScorePosition", scorePositionSupplier.get());

@@ -71,6 +71,7 @@ public class Swerve extends SubsystemBase {
 
     private final SwerveIO swerveIO;
     private final SwerveIOInputsAutoLogged inputs;
+    private final ModuleIOInputsAutoLogged[] moduleInputs;
 
     private final SwerveDriveKinematics kinematics;
     private final SwerveDrivePoseEstimator replayPoseEstimator;
@@ -160,6 +161,10 @@ public class Swerve extends SubsystemBase {
             case REPLAY, DISABLED -> new SwerveIO() {};
         };
         this.inputs = new SwerveIOInputsAutoLogged();
+        this.moduleInputs = new ModuleIOInputsAutoLogged[moduleConfigs.length];
+        for (int i = 0; i < moduleInputs.length; i++) {
+            moduleInputs[i] = new ModuleIOInputsAutoLogged();
+        }
 
         final Translation2d[] moduleOffsets = new Translation2d[moduleConfigs.length];
         for (int i = 0; i < moduleOffsets.length; i++) {
@@ -312,8 +317,11 @@ public class Swerve extends SubsystemBase {
     public void periodic() {
         final double swervePeriodicUpdateStart = Timer.getFPGATimestamp();
 
-        swerveIO.updateInputs(inputs);
+        swerveIO.updateInputs(inputs, moduleInputs);
         Logger.processInputs(LogKey, inputs);
+        for (final ModuleIOInputsAutoLogged moduleInputs : moduleInputs) {
+            Logger.processInputs(LogKey + "/Module" + moduleInputs.index, moduleInputs);
+        }
 
         final double odometryUpdatePeriodSeconds = updateOdometry();
         updateStateValidCallbacks();
